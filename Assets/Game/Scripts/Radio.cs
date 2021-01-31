@@ -13,6 +13,7 @@ public class Radio : MonoBehaviour
 	private void Awake()
 	{
 		AudioSource source = gameObject.AddComponent<AudioSource>();
+		source.volume = 0.1f;
 		m_source = source;
 		/*string[] files = Directory.GetFiles("Assets/Resources/Radio/");
 		foreach (string f in files)

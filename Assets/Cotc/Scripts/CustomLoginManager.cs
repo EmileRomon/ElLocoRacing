@@ -11,7 +11,7 @@ public class CustomLoginManager : MonoBehaviour
     // The cloud allows to make generic operations (non user related)
     private static Cloud Cloud;
     // The gamer is the base to perform most operations. A gamer object is obtained after successfully signing in.
-    private static Gamer Gamer;
+    private static Gamer currentGamer;
     // The friend, when fetched, can be used to send messages and such
     private string FriendId;
     // When a gamer is logged in, the loop is launched for domain private. Only one is run at once.
@@ -20,6 +20,8 @@ public class CustomLoginManager : MonoBehaviour
     [SerializeField] private CotcGameObject m_CotcGameObject = null;
 
     private LoginUIManager m_LoginUIManager = null;
+
+    private LeaderboardUIManager m_LeaderboardUIManager = null;
 
     // Use this for initialization
     void Start()
@@ -123,7 +125,7 @@ public class CustomLoginManager : MonoBehaviour
     public void DoConvertToEmail(string networdId, string networkSecret)
     {
         if (!RequireGamer()) return;
-        Gamer.Account.Convert(
+        currentGamer.Account.Convert(
             network: LoginNetwork.Email.ToString().ToLower(),
             networkId: networdId,
             networkSecret: networkSecret)
@@ -156,7 +158,7 @@ public class CustomLoginManager : MonoBehaviour
     {
         if (!RequireGamer() || !RequireFriend()) return;
 
-        Gamer.Community.SendEvent(
+        currentGamer.Community.SendEvent(
             gamerId: FriendId,
             eventData: Bundle.CreateObject("hello", "world"),
             notification: new PushNotification().Message("en", "Please open the app"))
@@ -168,7 +170,7 @@ public class CustomLoginManager : MonoBehaviour
     {
         if (!RequireGamer()) return;
 
-        Gamer.Transactions.Post(Bundle.CreateObject("gold", 50))
+        currentGamer.Transactions.Post(Bundle.CreateObject("gold", 50))
         .Done(result =>
         {
             Debug.Log("TX result: " + result.ToString());
@@ -178,15 +180,15 @@ public class CustomLoginManager : MonoBehaviour
     // Invoked when any sign in operation has completed
     private void DidLogin(Gamer newGamer)
     {
-        if (Gamer != null)
+        if (currentGamer != null)
         {
-            Debug.LogWarning("Current gamer " + Gamer.GamerId + " has been dismissed");
+            Debug.LogWarning("Current gamer " + currentGamer.GamerId + " has been dismissed");
             Loop.Stop();
         }
-        Gamer = newGamer;
-        Loop = Gamer.StartEventLoop();
+        currentGamer = newGamer;
+        Loop = currentGamer.StartEventLoop();
         Loop.ReceivedEvent += Loop_ReceivedEvent;
-        Debug.Log("Signed in successfully (ID = " + Gamer.GamerId + ")");
+        Debug.Log("Signed in successfully (ID = " + currentGamer.GamerId + ")");
         GetProfileData();
     }
 
@@ -197,9 +199,9 @@ public class CustomLoginManager : MonoBehaviour
 
     public bool RequireGamer()
     {
-        if (Gamer == null)
+        if (currentGamer == null)
             Debug.LogError("You need to login first. Click on a login button.");
-        return Gamer != null;
+        return currentGamer != null;
     }
 
     private bool RequireFriend()
@@ -211,7 +213,7 @@ public class CustomLoginManager : MonoBehaviour
 
     public void GetProfileData()
     {
-        Gamer.Profile.Get()
+        currentGamer.Profile.Get()
         .Done(profileRes =>
         {
             Debug.Log("Profile data: " + profileRes.ToString());
@@ -229,7 +231,7 @@ public class CustomLoginManager : MonoBehaviour
 
     public void DoLogout()
     {
-        Cloud.Logout(Gamer)
+        Cloud.Logout(currentGamer)
         .Done(result =>
         {
             Debug.Log("Logout succeeded");
@@ -241,6 +243,37 @@ public class CustomLoginManager : MonoBehaviour
         });
 
     }
+
+    public void AddToLeaderboard(long score, string board)
+    {
+        Debug.Log(score + " " + board);
+        currentGamer.Scores.Domain("private").Post(score, board, ScoreOrder.LowToHigh)
+        .Done(postScoreRes =>
+        {
+            Debug.Log("Post score: " + postScoreRes.ToString());
+        }, ex =>
+        {
+            // The exception should always be CotcException
+            CotcException error = (CotcException)ex;
+            Debug.LogError("Could not post score: " + error.ErrorCode + " (" + error.ErrorInformation + ")");
+        });
+    }
+
+    public void BestHighScores(string board)
+    {
+        currentGamer.Scores.Domain("private").BestHighScores(board, 10, 1)
+        .Done(bestHighScoresRes =>
+        {
+            m_LeaderboardUIManager = FindObjectOfType<LeaderboardUIManager>();
+            m_LeaderboardUIManager.DisplayLeaderboard(bestHighScoresRes);
+        }, ex =>
+        {
+            // The exception should always be CotcException
+            CotcException error = (CotcException)ex;
+            Debug.LogError("Could not get best high scores: " + error.ErrorCode + " (" + error.ErrorInformation + ")");
+        });
+    }
+
 
 }
 
